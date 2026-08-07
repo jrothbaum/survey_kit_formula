@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Rscript -e 'writeLines\\(tools:::Rd2txt\\(Rd_db\\(\"stats\"\\)[[\"formula.Rd\"]]\\)\\)')",
+      "Bash(Rscript -e 'library\\(tools\\); db <- Rd_db\\(\"stats\"\\); writeLines\\(capture.output\\(Rd2txt\\(db[[\"formula.Rd\"]]\\)\\)\\)')",
+      "Bash(Rscript -e \"if \\(!requireNamespace\\('jsonlite', quietly=TRUE\\)\\) cat\\('MISSING'\\) else cat\\('OK'\\)\")",
+      "Bash(Rscript -e 'args <- commandArgs\\(trailingOnly = TRUE\\); print\\(args\\)' --args \"y ~ a + b\")"
+    ]
+  }
+}
