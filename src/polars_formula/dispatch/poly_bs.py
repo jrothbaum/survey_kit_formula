@@ -49,9 +49,17 @@ from itertools import product as _product
 from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
-from scipy.interpolate import BSpline
 
 from .._numeric_core import PolyState, apply_poly, fit_poly
+
+# `scipy.interpolate` costs ~0.2s to import (it pulls in scipy.special,
+# scipy.linalg, and several compiled extensions) -- real relative to the
+# rest of this package's own import time, and dead weight for the very
+# common case of a formula that never uses `bs()`/`ns()`. Imported lazily,
+# once, inside the four functions below that actually need `BSpline`
+# rather than at module load time; Python caches the module after the
+# first real import, so this costs nothing beyond the first `bs()`/`ns()`
+# call in a process.
 
 _OUTSIDE_WARNING = "some 'x' values beyond boundary knots may cause ill-conditioned bases"
 
@@ -67,6 +75,8 @@ def _taylor_extrapolate(
     natural spline is constructed to be linear beyond the boundary by
     definition, so a linear extrapolation from the boundary is exact, not
     approximate, and no inward pivot shift is needed either)."""
+    from scipy.interpolate import BSpline
+
     n_basis = len(all_knots) - (basis_degree + 1)
     orders = np.arange(taylor_degree + 1)
     tt = np.empty((taylor_degree + 1, n_basis))
@@ -186,6 +196,8 @@ class BSplineState:
 
 
 def _bs_design_matrix(x: np.ndarray, all_knots: np.ndarray, degree: int, boundary_knots: Tuple[float, float]) -> np.ndarray:
+    from scipy.interpolate import BSpline
+
     order = degree + 1
     n_basis = len(all_knots) - order
     lo, hi = boundary_knots
@@ -295,6 +307,8 @@ class NaturalSplineState:
 
 
 def _ns_raw_basis(x: np.ndarray, all_knots: np.ndarray) -> np.ndarray:
+    from scipy.interpolate import BSpline
+
     return BSpline.design_matrix(x, all_knots, 3, extrapolate=False).toarray()
 
 
@@ -331,6 +345,8 @@ def _ns_boundary_second_derivatives(all_knots: np.ndarray, boundary_knots: Tuple
     each basis function's own `BSpline.derivative(nu=2)` individually (a
     loop over basis functions, not over rows of data -- cheap, n_basis is
     always small)."""
+    from scipy.interpolate import BSpline
+
     n_basis = len(all_knots) - 4
     boundary = np.asarray(boundary_knots, dtype=np.float64)
     cols = []

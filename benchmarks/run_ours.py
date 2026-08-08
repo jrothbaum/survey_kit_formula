@@ -5,6 +5,17 @@ RSS reflects this one build in isolation. Prints a single JSON line to
 stdout with the *internal* build time (excludes import + CSV read, which
 `/usr/bin/time -v`'s wall-clock figure does include -- the orchestrator
 reports both).
+
+Times `get_model_frame` (the Polars-native result), not `get_model_matrix`
+-- `get_model_matrix` is just `get_model_frame(...).to_numpy()`, and that
+conversion is a real, separately-payable cost (proportional to column
+count) that a caller only incurs if they actually want a dense numpy
+array. Including it here would conflate "how fast is the build" with "how
+fast is exporting to numpy afterward", and formulaic/R's own equivalents
+(a pandas/numpy array, an R matrix) don't have a separate Polars-native
+intermediate to compare against in the first place. Row/col counts are
+read straight off the DataFrame's own `.shape` -- no `.to_numpy()` call
+anywhere in the timed path.
 """
 
 from __future__ import annotations
@@ -39,10 +50,10 @@ def main() -> None:
 
     t0 = time.perf_counter()
     spec = ModelSpec.from_formula(args.formula, df)
-    mm = spec.get_model_matrix(df)
+    mf = spec.get_model_frame(df)
     build_seconds = time.perf_counter() - t0
 
-    print(json.dumps({"build_seconds": build_seconds, "rows": mm.shape[0], "cols": mm.shape[1]}))
+    print(json.dumps({"build_seconds": build_seconds, "rows": mf.shape[0], "cols": mf.shape[1]}))
 
 
 if __name__ == "__main__":
