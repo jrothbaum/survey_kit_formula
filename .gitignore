@@ -5,6 +5,8 @@ build/
 dist/
 wheels/
 *.egg-info
+*.csv
+*.parquet
 
 # Virtual environments
 .venv
