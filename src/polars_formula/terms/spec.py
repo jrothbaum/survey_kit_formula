@@ -16,7 +16,16 @@ import numpy as np
 import polars as pl
 
 from ..contrasts.base import CONTRAST_FUNCTIONS, default_contrast
-from ..dispatch.poly_bs import BSplineState, MultivariatePolyState, PolyState, fit_bs, fit_poly, fit_polym
+from ..dispatch.poly_bs import (
+    BSplineState,
+    MultivariatePolyState,
+    NaturalSplineState,
+    PolyState,
+    fit_bs,
+    fit_ns,
+    fit_poly,
+    fit_polym,
+)
 from ..dispatch.registry import UnknownFormulaFunction, is_registered
 from ..dispatch.reserved import contrast_override, is_offset
 from ..parser.args import split_args
@@ -43,6 +52,7 @@ class NumericSpec:
     width: int
     poly_state: Optional[Union[PolyState, MultivariatePolyState]] = None
     bs_state: Optional[BSplineState] = None
+    ns_state: Optional[NaturalSplineState] = None
 
 
 @dataclass
@@ -293,6 +303,8 @@ def _build_numeric_spec(
         return _build_poly_spec(v, df, null_dummy, null_fill)
     if v.name == "bs":
         return _build_bs_spec(v, df, null_dummy, null_fill)
+    if v.name == "ns":
+        return _build_ns_spec(v, df, null_dummy, null_fill)
     if v.name == "I":
         # I()'s raw text can reference multiple columns arbitrarily, so
         # there's no single underlying column to null-check generically --
@@ -360,20 +372,39 @@ def _build_poly_spec(v: Call, df: pl.DataFrame, null_dummy: bool, null_fill: flo
     return NumericSpec(var=v, width=fitted.shape[1], poly_state=mstate), has_nulls
 
 
+def _knots_kwarg(v: Call, kwargs: Dict[str, str]) -> Optional[List[float]]:
+    if "knots" not in kwargs:
+        return None
+    return [float(k) for k in _literal_eval_list(v, "knots", kwargs["knots"])]
+
+
 def _build_bs_spec(v: Call, df: pl.DataFrame, null_dummy: bool, null_fill: float) -> Tuple[NumericSpec, bool]:
     positional, kwargs = _split_call_args(v)
     if not positional:
         raise ValueError(f"bs({v.raw_args}) needs a column as its first argument")
-    if "knots" in kwargs:
-        raise ValueError("bs(): explicit 'knots' is not supported in v1; use 'df' instead")
     col = positional[0].raw_value.strip()
     has_nulls = _check_numeric_nulls(col, df, null_dummy, context=f"bs({v.raw_args})")
     df_arg = int(kwargs["df"]) if "df" in kwargs else None
+    knots = _knots_kwarg(v, kwargs)
     degree = int(kwargs.get("degree", 3))
     intercept = _as_bool(kwargs["intercept"]) if "intercept" in kwargs else False
     x = df[col].cast(pl.Float64).fill_null(null_fill).to_numpy()
-    fitted, state = fit_bs(x, df=df_arg, degree=degree, intercept=intercept)
+    fitted, state = fit_bs(x, df=df_arg, knots=knots, degree=degree, intercept=intercept)
     return NumericSpec(var=v, width=fitted.shape[1], bs_state=state), has_nulls
+
+
+def _build_ns_spec(v: Call, df: pl.DataFrame, null_dummy: bool, null_fill: float) -> Tuple[NumericSpec, bool]:
+    positional, kwargs = _split_call_args(v)
+    if not positional:
+        raise ValueError(f"ns({v.raw_args}) needs a column as its first argument")
+    col = positional[0].raw_value.strip()
+    has_nulls = _check_numeric_nulls(col, df, null_dummy, context=f"ns({v.raw_args})")
+    df_arg = int(kwargs["df"]) if "df" in kwargs else None
+    knots = _knots_kwarg(v, kwargs)
+    intercept = _as_bool(kwargs["intercept"]) if "intercept" in kwargs else False
+    x = df[col].cast(pl.Float64).fill_null(null_fill).to_numpy()
+    fitted, state = fit_ns(x, df=df_arg, knots=knots, intercept=intercept)
+    return NumericSpec(var=v, width=fitted.shape[1], ns_state=state), has_nulls
 
 
 def _term_columns(plan, factors: Dict[Var, FactorSpec], numerics: Dict[Var, NumericSpec]) -> int:

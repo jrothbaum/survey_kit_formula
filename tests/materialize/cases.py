@@ -49,4 +49,7 @@ FIXTURE_CASES = [
     ("polym_2var_degree2", "y ~ poly(x, z, degree = 2)"),
     ("polym_2var_raw", "y ~ poly(x, z, degree = 2, raw = TRUE)"),
     ("polym_with_other_terms", "y ~ a + poly(x, z, degree = 2)"),
+    ("ns_df4", "y ~ ns(x, df = 4)"),
+    ("ns_intercept", "y ~ 0 + ns(x, df = 4, intercept = TRUE)"),
+    ("ns_with_other_terms", "y ~ a + ns(x, df = 3)"),
 ]

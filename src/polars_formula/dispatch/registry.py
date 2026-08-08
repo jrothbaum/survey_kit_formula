@@ -44,11 +44,11 @@ class DispatchEntry:
 
 STRUCTURAL_RESERVED = frozenset({"factor", "ordered", "C", "offset"})
 
-# `poly`/`bs`: numeric, but "stateful" (fit on training data, must be
+# `poly`/`bs`/`ns`: numeric, but "stateful" (fit on training data, must be
 # reapplied identically to new data) — handled directly by
 # `dispatch/poly_bs.py` + `ModelSpec`, not through the simple
 # List[Arg] -> pl.Expr registry below.
-STATEFUL_RESERVED = frozenset({"poly", "bs"})
+STATEFUL_RESERVED = frozenset({"poly", "bs", "ns"})
 
 # Populated by polars_fns.py / numpy_fns.py at import time.
 _REGISTRY: Dict[str, DispatchEntry] = {}

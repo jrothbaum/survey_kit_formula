@@ -229,6 +229,40 @@ write.csv(unclass(Z), args[5], row.names = FALSE)
 """
 
 
+_R_NS_SCRIPT = r"""
+args <- commandArgs(trailingOnly = TRUE)
+x <- scan(args[1], quiet = TRUE)
+df_arg <- if (args[2] == "NA") NULL else as.integer(args[2])
+intercept <- as.logical(args[3])
+library(splines)
+Z <- if (is.null(df_arg)) { ns(x, intercept = intercept) } else { ns(x, df = df_arg, intercept = intercept) }
+write.csv(unclass(Z), args[4], row.names = FALSE)
+"""
+
+
+def r_ns_matrix(x, df=None, intercept: bool = False, allow_na: bool = False):
+    import numpy as np
+
+    if not R_AVAILABLE:
+        raise RuntimeError("Rscript not found on PATH; R is required for oracle tests")
+    script = _write_script(_R_NS_SCRIPT)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as xf:
+        xf.write("\n".join(str(v) for v in x))
+        x_path = xf.name
+    out_path = tempfile.NamedTemporaryFile(suffix=".csv", delete=False).name
+    df_str = "NA" if df is None else str(df)
+    result = subprocess.run(
+        ["Rscript", str(script), x_path, df_str, "TRUE" if intercept else "FALSE", out_path],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"R failed for ns(x, df={df}):\n{result.stderr}")
+    if allow_na:
+        return _read_csv_allow_na(out_path)
+    return np.loadtxt(out_path, delimiter=",", skiprows=1, ndmin=2)
+
+
 def _write_script(text: str) -> Path:
     fd = tempfile.NamedTemporaryFile(mode="w", suffix=".R", delete=False)
     fd.write(text)
@@ -316,7 +350,81 @@ def r_contr_poly_scores(scores):
     return np.loadtxt(out_path, delimiter=",", skiprows=1, ndmin=2)
 
 
-def r_bs_matrix(x, degree: int = 3, df=None, intercept: bool = False):
+_R_BS_PREDICT_SCRIPT = r"""
+args <- commandArgs(trailingOnly = TRUE)
+x <- scan(args[1], quiet = TRUE)
+newx <- scan(args[2], quiet = TRUE)
+df_arg <- as.integer(args[3])
+out <- args[4]
+library(splines)
+b <- bs(x, df = df_arg)
+m <- suppressWarnings(predict(b, newx))
+write.csv(unclass(m), out, row.names = FALSE)
+"""
+
+_R_NS_PREDICT_SCRIPT = r"""
+args <- commandArgs(trailingOnly = TRUE)
+x <- scan(args[1], quiet = TRUE)
+newx <- scan(args[2], quiet = TRUE)
+df_arg <- as.integer(args[3])
+out <- args[4]
+library(splines)
+n <- ns(x, df = df_arg)
+m <- suppressWarnings(predict(n, newx))
+write.csv(unclass(m), out, row.names = FALSE)
+"""
+
+
+def _predict_oracle(script_text, x, newx, df):
+    import numpy as np
+
+    if not R_AVAILABLE:
+        raise RuntimeError("Rscript not found on PATH; R is required for oracle tests")
+    script = _write_script(script_text)
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as xf:
+        xf.write("\n".join(str(v) for v in x))
+        x_path = xf.name
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as nf:
+        nf.write("\n".join(str(v) for v in newx))
+        newx_path = nf.name
+    out_path = tempfile.NamedTemporaryFile(suffix=".csv", delete=False).name
+    result = subprocess.run(
+        ["Rscript", str(script), x_path, newx_path, str(df), out_path],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"R predict failed:\n{result.stderr}")
+    return np.loadtxt(out_path, delimiter=",", skiprows=1, ndmin=2)
+
+
+def r_bs_predict_outside(x, newx, df: int):
+    """Fits `bs(x, df=df)` then `predict()`s at `newx`, which may include
+    values outside `range(x)` -- exercises R's out-of-range extrapolation
+    path directly."""
+    return _predict_oracle(_R_BS_PREDICT_SCRIPT, x, newx, df)
+
+
+def r_ns_predict_outside(x, newx, df: int):
+    return _predict_oracle(_R_NS_PREDICT_SCRIPT, x, newx, df)
+
+
+def _read_csv_allow_na(path):
+    """Like the `np.loadtxt(..., ndmin=2)` calls elsewhere in this module,
+    but tolerates literal "NA" cells (R's `write.csv` output for missing
+    values) -- `np.loadtxt` can't parse those at all. Only used where the
+    result may legitimately contain NA rows; `np.genfromtxt` doesn't
+    guarantee 2D output for a single row the way `loadtxt(ndmin=2)` does,
+    so that's fixed up explicitly."""
+    import numpy as np
+
+    arr = np.genfromtxt(path, delimiter=",", skip_header=1)
+    if arr.ndim == 1:
+        arr = arr.reshape(1, -1)
+    return arr
+
+
+def r_bs_matrix(x, degree: int = 3, df=None, intercept: bool = False, allow_na: bool = False):
     import numpy as np
 
     if not R_AVAILABLE:
@@ -334,4 +442,6 @@ def r_bs_matrix(x, degree: int = 3, df=None, intercept: bool = False):
     )
     if result.returncode != 0:
         raise RuntimeError(f"R failed for bs(x, df={df}, degree={degree}):\n{result.stderr}")
+    if allow_na:
+        return _read_csv_allow_na(out_path)
     return np.loadtxt(out_path, delimiter=",", skiprows=1, ndmin=2)
