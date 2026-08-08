@@ -28,12 +28,13 @@ def is_offset(call: Call) -> bool:
     return call.name == "offset"
 
 
-def contrast_override(call: Call) -> Optional[Tuple[str, Dict[str, str]]]:
+def contrast_override(call: Call) -> Optional[Tuple[Optional[str], Dict[str, str]]]:
     """Mirrors R's actual `C(object, contr, how.many, ...)` calling
-    convention (`src/library/stats/R/C.R`): the 2nd positional argument is
-    a contrast function, possibly given as a bare shorthand name
-    (`C(x, treatment)`, `C(x, sum)`, ...); extra *keyword* arguments (e.g.
-    `base=2`) are forwarded to that contrast function.
+    convention (`src/library/stats/R/C.R`, read directly, not assumed): the
+    2nd positional argument is a contrast function, possibly given as a
+    bare shorthand name (`C(x, treatment)`, `C(x, sum)`, ...); extra
+    *keyword* arguments (e.g. `base=2`) are forwarded to that contrast
+    function.
 
     Note this is `C(x, contr.treatment, base=2)`, not `C(x,
     contr.treatment(base=2))` — the latter isn't valid R either (R's
@@ -41,15 +42,28 @@ def contrast_override(call: Call) -> Optional[Tuple[str, Dict[str, str]]]:
     directly inside the formula, before the factor's levels are known,
     would raise "argument 'n' is missing").
 
-    Returns `(resolved_contrast_name, forwarded_kwargs)`, or `None` for
-    `C(x)` / `factor(x)` / `ordered(x)` / any call other than `C`.
+    R's `C()` still applies extra keyword arguments even when `contr`
+    itself is *omitted* — verified directly from its source: if `contr` is
+    missing but `...` isn't, it resolves `contr` to the factor's usual
+    default (`contr.treatment` unordered / `contr.poly` ordered) and calls
+    that default with the extra kwargs, rather than ignoring them. So
+    `C(x, base = 2)` is valid R and does apply `base=2`. This function
+    doesn't know the factor's ordered-ness, so it signals that case with a
+    `None` contrast name — the caller (which does know) resolves it to the
+    right default.
+
+    Returns `(resolved_contrast_name_or_None, forwarded_kwargs)`, or a
+    bare `None` when there's truly nothing to override (`C(x)` alone,
+    `factor(x)`/`ordered(x)`, or any call other than `C`).
     """
     if call.name != "C":
         return None
     args = split_args(call.raw_args)
     positional = [a for a in args if a.keyword is None]
-    if len(positional) < 2:
-        return None
-    raw_name = positional[1].raw_value.strip()
     kwargs = {a.keyword: a.raw_value.strip() for a in args if a.keyword is not None}
-    return resolve_contrast_name(raw_name), kwargs
+    if len(positional) >= 2:
+        raw_name = positional[1].raw_value.strip()
+        return resolve_contrast_name(raw_name), kwargs
+    if kwargs:
+        return None, kwargs
+    return None

@@ -44,6 +44,9 @@ class FactorSpec:
     levels: List[object]
     ordered: bool
     contrast_matrix: np.ndarray  # (n_levels, n_levels - 1)
+    contrast_name: str  # e.g. "contr.treatment", "contr.poly" -- which of
+    # CONTRAST_FUNCTIONS built contrast_matrix; needed at column-naming
+    # time to match R's contr.poly-specific ".L"/".Q"/".C" suffixes.
 
 
 @dataclass
@@ -152,6 +155,20 @@ class ModelSpec:
             df = df.collect()
         return build_model_matrix(self, df)
 
+    def get_model_frame(self, df: Union[pl.DataFrame, pl.LazyFrame]) -> pl.DataFrame:
+        """Same values and column order as `get_model_matrix`, returned as
+        a Polars DataFrame with each column packed to the tightest dtype
+        that represents it exactly (Boolean for 0/1 dummy/indicator
+        blocks, the smallest signed integer type for other whole-number
+        columns, Float64 otherwise) instead of one dense float64 numpy
+        array. Column names are deterministic and readable but not an
+        attempt at exact parity with R's `colnames(model.matrix())`."""
+        from ..build.matrix import build_model_frame
+
+        if isinstance(df, pl.LazyFrame):
+            df = df.collect()
+        return build_model_frame(self, df)
+
 
 def _expand_dot(rhs: TermList, lhs: Optional[Var], schema: pl.Schema) -> TermList:
     dot_term = None
@@ -239,15 +256,25 @@ def _build_factor_spec(v: Var, dc: DataClass, df: pl.DataFrame, null_dummy: bool
     if isinstance(v, Call) and v.name == "C":
         override = contrast_override(v)
         if override is not None:
-            contrast_name, raw_kwargs = override
+            resolved_name, raw_kwargs = override
+            # `resolved_name` is None when `C(x, base = 2)` omits the
+            # contrast function itself -- R still applies `base=2` to the
+            # factor's usual default contrast in that case (verified
+            # against R's own C() source), so resolve to that default here
+            # rather than treating it as "no override".
+            contrast_name = resolved_name if resolved_name is not None else ("contr.poly" if ordered else "contr.treatment")
             contrast_kwargs = {k: int(val) for k, val in raw_kwargs.items()}
 
     if contrast_name is not None:
         matrix = CONTRAST_FUNCTIONS[contrast_name](n, **contrast_kwargs)
     else:
+        contrast_name = "contr.poly" if ordered else "contr.treatment"
         matrix = default_contrast(n, ordered, scores=scores)
 
-    return FactorSpec(var=v, column=col, levels=levels, ordered=ordered, contrast_matrix=matrix), has_nulls
+    return (
+        FactorSpec(var=v, column=col, levels=levels, ordered=ordered, contrast_matrix=matrix, contrast_name=contrast_name),
+        has_nulls,
+    )
 
 
 def _extract_levels(df: pl.DataFrame, col: str, dtype: pl.DataType) -> List[object]:

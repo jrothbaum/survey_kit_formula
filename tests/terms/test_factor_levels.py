@@ -69,6 +69,29 @@ def test_scores_without_ordered_rejected():
         ModelSpec.from_formula("y ~ factor(a, scores=[1, 2])", DF)
 
 
+def test_C_base_without_explicit_contrast_name_applies_base():
+    # R's C() forwards extra kwargs (base=) to the factor's *default*
+    # contrast even when the contrast function itself is omitted --
+    # verified directly against R's own C.R source and against real R's
+    # `model.matrix(~C(a, base = 2))` output. A prior version of this
+    # function silently dropped `base=2` here and fell back to the
+    # untouched default (base=1) whenever `treatment`/etc. wasn't spelled
+    # out explicitly.
+    spec = ModelSpec.from_formula("y ~ C(a, base=2)", DF)
+    (fs,) = spec.factors.values()
+    assert fs.contrast_name == "contr.treatment"
+    np.testing.assert_allclose(fs.contrast_matrix, contr_treatment(2, base=2))
+
+
+@requires_r
+def test_C_base_without_explicit_contrast_name_matches_r():
+    formula = "y ~ C(a, base=2)"
+    spec = ModelSpec.from_formula(formula, DF)
+    ours = spec.get_model_matrix(DF)
+    theirs = r_model_matrix(formula, DF, factor_cols=(), bool_cols=())
+    np.testing.assert_allclose(ours, theirs, atol=1e-8)
+
+
 @requires_r
 def test_ordered_scores_matches_r():
     formula = "y ~ ordered(ordv, levels=['lo', 'mid', 'hi'], scores=[1, 2, 10])"
