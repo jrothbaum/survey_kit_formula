@@ -1,11 +1,10 @@
 # Benchmarks
 
-Time and peak-RAM comparison of `polars_formula` against
-[formulaic](https://github.com/matthewwardrop/formulaic) and R's
-`model.matrix()`, across 9 formulas and 3 dataset sizes.
-
-Full write-up with charts: see the published report (ask for the link, or
-regenerate per below).
+`polars_formula` vs [formulaic](https://github.com/matthewwardrop/formulaic)
+vs R's `model.matrix()`. 10 formulas × 20K/100K/400K rows, all 3 tools;
+`survey_kit_shaped` and `wide_columns` also run at 800K/1.6M/2.4M rows for
+`ours`/`r` only (`formulaic` already fails at 400K on similarly-shaped
+formulas, so it's skipped at larger sizes).
 
 ## Running
 
@@ -14,87 +13,105 @@ uv run python benchmarks/generate_data.py   # writes benchmarks/data/n*.csv
 uv run python benchmarks/benchmark.py       # writes benchmarks/results.csv
 ```
 
-Requires `uv`, R (`Rscript` on `PATH`), and Linux `/proc` (the memory
-watchdog reads `/proc/*/stat` and `/proc/<pid>/status`; it will not run
-correctly on macOS/Windows).
+Requires `uv`, R (`Rscript` on PATH), Linux `/proc`. Each cell runs as its
+own subprocess under a live 8GB RSS cap (`benchmark.py`'s watchdog); a cell
+that exceeds it gets killed and marked `exceeded_memory_cap`, not crashed.
+`build_seconds` times only the model-matrix construction (after the CSV
+read); `run_ours.py` times `get_model_frame` (the Polars-native result),
+not `get_model_matrix` (`= get_model_frame(...).to_numpy()`, a separate,
+column-count-proportional cost).
 
-Each cell (tool × formula × row-count) runs as its own subprocess via
-`run_ours.py`, `run_formulaic.py`, or `run_r.R`. `benchmark.py` is the
-orchestrator: it builds the command, runs it under a live RSS cap, and
-records wall time, build time (model-matrix construction only, excluding
-process/import startup), peak RSS, and output column count.
+## Formulas
 
-## The memory cap, and why it's not optional
+| name | formula | cols |
+|---|---|---|
+| numeric | `~ x1` | 2 |
+| single_cat_low | `~ A` | 3 |
+| add_numeric_cat | `~ x1 + A` | 4 |
+| interact_numeric_cat | `~ x1:A` | 4 |
+| two_cat_low | `~ A + B` | 5 |
+| four_cat_interact_low | `~ A:B:C:D` | 82 |
+| numeric_cat_cross | `~ x1*x2*A*B` | 36 |
+| high_card_interact | `~ Ahi:Bhi` (60×45 levels) | 2701 |
+| survey_kit_shaped | `~ 1+x1+x2+x2*x1*Ahi` | 240 |
+| wide_columns | `~ Vhi:Ahi` (150×60 levels) | 9001 |
 
-An earlier, uncapped version of this suite let one cell (a high-cardinality
-categorical interaction at large N) grow unboundedly and froze the host
-machine hard enough to need a reboot. `benchmark.py` now enforces a hard
-8GB RSS ceiling on every cell, live, not just after the fact:
+`A`/`B`/`C`/`D`: 3 levels. `Ahi`/`Bhi`/`Vhi`: 60/45/150 levels.
 
-- `systemd-run --scope -p MemoryMax=` was tried first and silently did
-  **not** enforce anything in this sandbox (no cgroup delegation available) —
-  worse than no guard at all, since it looks like protection while providing
-  none. Don't rely on it without first verifying enforcement with a
-  deliberate over-limit test.
-- `ulimit -v` (virtual memory) is a real kernel rlimit and does enforce, but
-  it's the wrong metric: Python/NumPy/Polars reserve far more virtual
-  address space than they resident-use, so it kills legitimate builds well
-  under the intended resident-memory limit.
-- What's actually running: a polling watchdog (`_run_with_rss_cap` in
-  `benchmark.py`) that sums real resident memory (`VmRSS`) across the whole
-  process *group* (found via `/proc/*/stat`, not the unreliable
-  `/proc/<pid>/task/<pid>/children`) every 50ms, and `os.killpg`s the group
-  the instant it crosses the cap.
+## Results (build_seconds / peak RSS MB)
 
-If you modify the watchdog, re-verify it before trusting it on a real run:
-confirm a tiny cap kills a trivial allocation, confirm a real cap lets a
-real build through, and confirm a real cap kills a real over-limit build —
-each with `free -h` open to watch actual system memory, not just the
-watchdog's own accounting.
+n=20,000:
 
-Three cells (`high_card_interact` — `~ Ahi:Bhi`, 60×45 levels — at
-n=400,000, for all three tools) hit this cap on the last full run and were
-killed cleanly; this is expected, not a bug.
+| formula | ours | formulaic | r |
+|---|---|---|---|
+| numeric | 0.027 / 110 | 0.002 / 164 | 0.001 / 68 |
+| single_cat_low | 0.025 / 101 | 0.005 / 155 | 0.003 / 68 |
+| add_numeric_cat | 0.008 / 116 | 0.004 / 152 | 0.003 / 68 |
+| interact_numeric_cat | 0.029 / 116 | 0.004 / 152 | 0.003 / 69 |
+| two_cat_low | 0.029 / 99 | 0.006 / 152 | 0.003 / 68 |
+| four_cat_interact_low | 0.026 / 99 | 0.031 / 170 | 0.009 / 68 |
+| numeric_cat_cross | 0.029 / 123 | 0.012 / 153 | 0.006 / 69 |
+| high_card_interact | 0.052 / 155 | 0.404 / 983 | 0.238 / 430 |
+| survey_kit_shaped | 0.038 / 155 | 0.052 / 228 | 0.025 / 69 |
+| wide_columns | 0.156 / 224 | 1.377 / 2903 | 0.680 / 1394 |
 
-## Formula battery
+n=100,000:
 
-Based on formulaic's own benchmark suite (`A`/`B`/`C`/`D`, 3-level
-categoricals), extended with:
+| formula | ours | formulaic | r |
+|---|---|---|---|
+| numeric | 0.009 / 123 | 0.003 / 160 | 0.003 / 92 |
+| single_cat_low | 0.012 / 102 | 0.011 / 164 | 0.018 / 127 |
+| add_numeric_cat | 0.030 / 115 | 0.012 / 160 | 0.019 / 110 |
+| interact_numeric_cat | 0.022 / 137 | 0.012 / 162 | 0.020 / 106 |
+| two_cat_low | 0.020 / 107 | 0.019 / 158 | 0.019 / 119 |
+| four_cat_interact_low | 0.030 / 111 | 0.116 / 285 | 0.115 / 156 |
+| numeric_cat_cross | 0.026 / 162 | 0.045 / 216 | 0.032 / 128 |
+| high_card_interact | 0.177 / 265 | 1.869 / 4298 | 1.009 / 2105 |
+| survey_kit_shaped | 0.046 / 314 | 0.195 / 512 | 0.173 / 278 |
+| wide_columns | 0.625 / 484 | **capped @8GB** / 8276 | 3.306 / 6993 |
 
-- `Ahi`/`Bhi` — 60- and 45-level categoricals, to stress the interaction
-  path this library exists for. formulaic's own low-cardinality columns
-  never exercise it.
-- `survey_kit_shaped` (`~ 1 + x1 + x2 + x2*x1*Ahi`) — shaped like the
-  production formula that originally motivated this project.
+n=400,000:
 
-patsy is not included; the comparison here is specifically against
-formulaic and R.
+| formula | ours | formulaic | r |
+|---|---|---|---|
+| numeric | 0.012 / 164 | 0.006 / 187 | 0.003 / 201 |
+| single_cat_low | 0.016 / 177 | 0.036 / 186 | 0.012 / 201 |
+| add_numeric_cat | 0.032 / 170 | 0.040 / 209 | 0.017 / 201 |
+| interact_numeric_cat | 0.025 / 174 | 0.040 / 212 | 0.017 / 201 |
+| two_cat_low | 0.022 / 160 | 0.072 / 197 | 0.022 / 201 |
+| four_cat_interact_low | 0.076 / 348 | 0.432 / 626 | 0.184 / 419 |
+| numeric_cat_cross | 0.041 / 231 | 0.166 / 411 | 0.096 / 267 |
+| high_card_interact | 1.169 / 676 | **capped @8GB** / 8250 | **capped @8GB** / 8267 |
+| survey_kit_shaped | 0.092 / 806 | 0.749 / 1663 | 0.372 / 835 |
+| wide_columns | 3.823 / 1376 | **capped @8GB** / 8218 | **error** (alloc 26.8GB) |
 
-## Known caveat: formulaic and R disagree on column count for one shape
+## Large-scale tier (ours / r only)
 
-For a bare multi-way categorical interaction with an intercept and no
-lower-order terms (`A:B:C:D`, `Ahi:Bhi`), formulaic produces one fewer
-column than R (e.g. 81 vs 82 for `A:B:C:D`). formulaic's
-`model_spec.structure` shows why: it decomposes the interaction into
-separately-reduced "scoped" sub-blocks and reaches the true minimal
-full-rank representation. R's own algorithm (read directly from
-`model.c`, not assumed) is a simpler heuristic that doesn't catch this
-case and leaves one redundant column. `polars_formula` matches R's
-heuristic, not formulaic's, since matching R is the stated goal — but it
-means a time/RAM comparison on this formula shape isn't quite
-apples-to-apples: formulaic is doing measurably less work because it's
-computing a smaller matrix.
+| formula | n | ours | r |
+|---|---|---|---|
+| survey_kit_shaped | 800,000 | 0.170 / 1683 | 0.739 / 1739 |
+| survey_kit_shaped | 1,600,000 | 0.324 / 3341 | 1.402 / 3220 |
+| survey_kit_shaped | 2,400,000 | 0.473 / 4895 | 2.348 / 5465 |
+| wide_columns | 800,000 | 7.392 / 2543 | **error** |
+| wide_columns | 1,600,000 | 14.505 / 4886 | **error** |
+| wide_columns | 2,400,000 | 23.366 / 7223 | **error** |
+
+`r`'s `wide_columns` error is `model.matrix()` itself refusing the
+allocation (`cannot allocate vector of size 26.8 Gb`) — R exits cleanly
+before RSS climbs, not a watchdog kill.
+
+## Known caveat
+
+`formulaic` and R disagree on column count for a bare multi-way
+categorical interaction with no lower-order terms (`A:B:C:D`: 81 cols for
+formulaic, 82 for R and `ours`) — formulaic prunes to true full rank per
+scoped sub-block, R's own heuristic (`model.c`) doesn't catch this case
+and leaves one redundant column. `polars_formula` matches R here, so
+comparisons on that formula shape aren't perfectly apples-to-apples.
 
 ## Files
 
-- `generate_data.py` — writes `data/n{20000,100000,400000}.csv`. Numeric
-  columns `x1`, `x2`; categoricals `A`/`B`/`C`/`D` (3 levels) and
-  `Ahi`/`Bhi` (60/45 levels, prefixed `"L"` so CSV readers don't
-  re-infer them as integers).
-- `run_ours.py`, `run_formulaic.py`, `run_r.R` — per-tool runners, each
-  prints a JSON result line.
-- `benchmark.py` — orchestrator: formula/size matrix, subprocess
-  invocation, the RSS watchdog, CSV output (written incrementally, after
-  every cell).
-- `results.csv` — latest run's results (3 tools × 9 formulas × 3 sizes).
-- `run_log.txt` — stdout log of the latest run.
+- `generate_data.py` — writes `data/n*.csv`.
+- `run_ours.py`, `run_formulaic.py`, `run_r.R` — per-tool runners.
+- `benchmark.py` — orchestrator + RSS watchdog.
+- `results.csv`, `run_log.txt` — latest run.

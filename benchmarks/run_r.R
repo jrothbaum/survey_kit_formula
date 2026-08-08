@@ -14,7 +14,7 @@ for (i in seq_along(args)) {
 }
 
 d <- read.csv(data_path, stringsAsFactors = FALSE)
-for (col in c("A", "B", "C", "D", "Ahi", "Bhi")) {
+for (col in c("A", "B", "C", "D", "Ahi", "Bhi", "Vhi")) {
     if (col %in% names(d)) d[[col]] <- factor(d[[col]])
 }
 

@@ -32,6 +32,28 @@ Methodology (formula battery, comparison tools) otherwise follows
 formulaic's own benchmark suite (matthewwardrop/formulaic, benchmarks/),
 extended with peak-RSS measurement, which formulaic's own suite explicitly
 does not attempt ("memory utilization is not prioritized").
+
+Scaling tier (LARGE_SCALE_FORMULAS x generate_data.py's LARGE_SIZES,
+`ours`/`r` only): added to see how build time and RAM actually *scale*
+with row count and column count, not just where each tool sits at one
+fixed size -- reached by staging up size in small, individually-verified
+steps (800K -> 1.6M -> 2.4M rows; a separate 150-level `Vhi` column for a
+9,001-column bare interaction, tested at 20K/100K/400K/1.6M) rather than
+jumping straight to a large target, with `free -h` checked between every
+step, exactly the caution the original incident (see above) called for.
+`formulaic` is excluded from this tier: it already exceeds the memory cap
+on similarly-shaped formulas at the *existing* sizes (see `results.csv`'s
+`high_card_interact` rows), so running it here would only reproduce
+`exceeded_memory_cap` a few more times, not add information. `r` stays in
+-- it's expected to hit the cap on `wide_columns` at these sizes (manual
+testing already found `r` at 7.1GB with just 100,000 rows on that
+formula's 9,001 columns), and that's a legitimate, informative result
+matching how `high_card_interact` already behaves in the main sweep, not
+something to hide by scoping `r` out. The cap is what makes it safe to
+let the automated sweep attempt these cells at all -- staged manual
+verification was for finding the LARGE_SIZES ladder itself without
+guessing at a safe ceiling, not a prerequisite for every individual cell
+the sweep might now generate.
 """
 
 from __future__ import annotations
@@ -60,6 +82,10 @@ FORMULAS = [
     ("numeric_cat_cross", "~ x1*x2*A*B"),
     ("high_card_interact", "~ Ahi:Bhi"),
     ("survey_kit_shaped", "~ 1 + x1 + x2 + x2*x1*Ahi"),
+    ("wide_columns", "~ Vhi:Ahi"),  # 150 x 60 bare interaction, 9,001
+    # columns -- isolates *column*-count-driven scaling from row-count
+    # scaling (all the other formulas above stay under a few hundred
+    # columns regardless of n).
 ]
 
 # Deliberately conservative given the machine has 14GB total RAM: the
@@ -68,6 +94,12 @@ FORMULAS = [
 # fine" -> "near the cap" -> "cleanly exceeds the cap" for that cell,
 # rather than assuming a larger ceiling is safe.
 SIZES = [20_000, 100_000, 400_000]
+
+# See generate_data.py's LARGE_SIZES (kept in sync) and this module's
+# docstring for how this tier and its size ladder were arrived at.
+LARGE_SIZES = [800_000, 1_600_000, 2_400_000]
+LARGE_SCALE_FORMULAS = ["survey_kit_shaped", "wide_columns"]
+LARGE_SCALE_TOOLS = ["ours", "r"]  # formulaic excluded, see docstring
 
 TOOLS = ["ours", "formulaic", "r"]
 
@@ -233,28 +265,43 @@ def run_cell(tool: str, formula_name: str, formula: str, n: int) -> dict:
     return row
 
 
+def _build_cell_list(sizes: list[int]) -> list[tuple[str, str, str, int]]:
+    """(tool, formula_name, formula, n) for the main sweep (every formula
+    x every size x every tool) plus the scoped large-scale tier (only
+    LARGE_SCALE_FORMULAS, only LARGE_SIZES, only LARGE_SCALE_TOOLS) --
+    kept separate from a single full cross product deliberately, since
+    re-running every trivial formula at multi-million-row sizes adds
+    runtime without new information (see this module's docstring)."""
+    formulas_by_name = dict(FORMULAS)
+    cells = [(tool, name, formula, n) for n in sizes for name, formula in FORMULAS for tool in TOOLS]
+    cells += [
+        (tool, name, formulas_by_name[name], n)
+        for n in LARGE_SIZES
+        for name in LARGE_SCALE_FORMULAS
+        for tool in LARGE_SCALE_TOOLS
+    ]
+    return cells
+
+
 def main() -> None:
     sizes = SIZES if len(sys.argv) == 1 else [int(a) for a in sys.argv[1:]]
+    cells = _build_cell_list(sizes)
     rows = []
-    total = len(TOOLS) * len(FORMULAS) * len(sizes)
-    i = 0
-    for n in sizes:
-        for formula_name, formula in FORMULAS:
-            for tool in TOOLS:
-                i += 1
-                t0 = time.time()
-                row = run_cell(tool, formula_name, formula, n)
-                elapsed = time.time() - t0
-                rows.append(row)
-                print(
-                    f"[{i}/{total}] {tool:10s} {formula_name:22s} n={n:>9,} "
-                    f"status={row['status']:20s} wall={row['wall_seconds']} "
-                    f"rss_mb={row['max_rss_mb']} ({elapsed:.1f}s to run)",
-                    flush=True,
-                )
-                # Persist after every cell, not just at the end -- if
-                # something still goes wrong, partial results survive.
-                _write_csv(rows)
+    total = len(cells)
+    for i, (tool, formula_name, formula, n) in enumerate(cells, start=1):
+        t0 = time.time()
+        row = run_cell(tool, formula_name, formula, n)
+        elapsed = time.time() - t0
+        rows.append(row)
+        print(
+            f"[{i}/{total}] {tool:10s} {formula_name:22s} n={n:>9,} "
+            f"status={row['status']:20s} wall={row['wall_seconds']} "
+            f"rss_mb={row['max_rss_mb']} ({elapsed:.1f}s to run)",
+            flush=True,
+        )
+        # Persist after every cell, not just at the end -- if something
+        # still goes wrong, partial results survive.
+        _write_csv(rows)
 
     print(f"\nwrote {RESULTS_CSV}")
 

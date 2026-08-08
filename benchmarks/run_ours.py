@@ -28,7 +28,7 @@ import polars as pl
 
 from polars_formula.terms.spec import ModelSpec
 
-_CATEGORICAL_COLS = ("A", "B", "C", "D", "Ahi", "Bhi")
+_CATEGORICAL_COLS = ("A", "B", "C", "D", "Ahi", "Bhi", "Vhi")
 
 
 def _assert_categoricals_are_strings(df: pl.DataFrame) -> None:
