@@ -22,7 +22,8 @@ raise rather than silently extrapolating.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from itertools import product as _product
+from typing import List, Optional, Sequence, Tuple
 
 import numpy as np
 from scipy.interpolate import BSpline
@@ -33,10 +34,79 @@ __all__ = [
     "PolyState",
     "fit_poly",
     "apply_poly",
+    "MultivariatePolyState",
+    "fit_polym",
+    "apply_polym",
     "BSplineState",
     "fit_bs",
     "apply_bs",
 ]
+
+
+@dataclass(frozen=True)
+class MultivariatePolyState:
+    degree: int
+    raw: bool
+    variable_states: Tuple[PolyState, ...]
+    combos: Tuple[Tuple[int, ...], ...]
+
+
+def _poly_exponent_combos(nd: int, degree: int) -> Tuple[Tuple[int, ...], ...]:
+    """R's `polym()`: `expand.grid(rep(list(0:degree), nd))` (first variable
+    fastest-varying), filtered to combinations whose exponents sum to a
+    total degree in `(0, degree]`. Verified directly against R's own
+    `colnames(polym(...))` output for 2- and 3-variable cases, not just
+    read from the R source — `expand.grid`'s fastest-axis convention is
+    easy to get backwards (it's the opposite of `itertools.product`'s)."""
+    all_combos = (tuple(reversed(t)) for t in _product(range(degree + 1), repeat=nd))
+    return tuple(c for c in all_combos if 0 < sum(c) <= degree)
+
+
+def fit_polym(xs: Sequence[np.ndarray], degree: int, raw: bool = False) -> Tuple[np.ndarray, MultivariatePolyState]:
+    """`poly(x1, x2, ..., degree=D)` / R's `polym()`: a total-degree-filtered
+    tensor product of each variable's own orthogonal (or raw) 1D basis, not
+    a plain cross of them -- e.g. degree=2 in 2 variables gives the 5 terms
+    {x1, x1^2, x2, x1*x2, x2^2}, not all 9 combinations of degree 0-2."""
+    if len(xs) < 2:
+        raise ValueError("fit_polym needs at least 2 variables; use fit_poly for a single variable")
+    lengths = {len(x) for x in xs}
+    if len(lengths) != 1:
+        raise ValueError("polym: all variables must have the same length")
+
+    variable_states: List[PolyState] = []
+    augmented: List[np.ndarray] = []
+    for x in xs:
+        x = np.asarray(x, dtype=np.float64)
+        Z, state = fit_poly(x, degree=degree, raw=raw)
+        variable_states.append(state)
+        augmented.append(np.column_stack([np.ones(len(x)), Z]))
+
+    combos = _poly_exponent_combos(len(xs), degree)
+    result = _combine_polym(augmented, combos)
+    state = MultivariatePolyState(degree=degree, raw=raw, variable_states=tuple(variable_states), combos=combos)
+    return result, state
+
+
+def apply_polym(xs: Sequence[np.ndarray], state: MultivariatePolyState) -> np.ndarray:
+    if len(xs) != len(state.variable_states):
+        raise ValueError(f"polym: expected {len(state.variable_states)} variables, got {len(xs)}")
+    augmented = []
+    for x, vstate in zip(xs, state.variable_states):
+        x = np.asarray(x, dtype=np.float64)
+        Z = apply_poly(x, vstate)
+        augmented.append(np.column_stack([np.ones(len(x)), Z]))
+    return _combine_polym(augmented, state.combos)
+
+
+def _combine_polym(augmented: List[np.ndarray], combos: Tuple[Tuple[int, ...], ...]) -> np.ndarray:
+    n = augmented[0].shape[0]
+    out = np.empty((n, len(combos)), dtype=np.float64)
+    for j, combo in enumerate(combos):
+        col = np.ones(n)
+        for var_idx, exponent in enumerate(combo):
+            col = col * augmented[var_idx][:, exponent]
+        out[:, j] = col
+    return out
 
 
 @dataclass(frozen=True)

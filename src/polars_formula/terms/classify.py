@@ -77,6 +77,28 @@ def underlying_column(v: Var) -> str:
     raise TypeError(f"unknown Var type: {type(v)!r}")  # pragma: no cover - defensive
 
 
+def referenced_columns(v: Var) -> list:
+    """All positional bare-identifier arguments, e.g. `poly(x1, x2,
+    degree=2)` -> `["x1", "x2"]`. Only `poly()` currently has more than one
+    (R has no multivariate `bs()`/`log()`/etc.); everything else's list is
+    just `[underlying_column(v)]`."""
+    if isinstance(v, Identifier):
+        return [v.name]
+    if isinstance(v, Call):
+        args = split_args(v.raw_args)
+        positional = [a.raw_value.strip() for a in args if a.keyword is None]
+        if not positional:
+            raise ValueError(f"{v.name}(...) has no positional argument to classify")
+        for text in positional:
+            if not _looks_like_bare_identifier(text):
+                raise ValueError(
+                    f"{v.name}({v.raw_args}) does not have bare column names as its positional "
+                    "arguments; nested transforms are not supported in v1"
+                )
+        return positional
+    raise TypeError(f"unknown Var type: {type(v)!r}")  # pragma: no cover - defensive
+
+
 def _looks_like_bare_identifier(text: str) -> bool:
     from ..parser.tokenizer import _IDENT_CONT, _IDENT_START
 

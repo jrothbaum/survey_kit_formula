@@ -183,6 +183,40 @@ Z <- poly(x, degree = degree)
 write.csv(unclass(Z), args[3], row.names = FALSE)
 """
 
+_R_POLYM_SCRIPT = r"""
+args <- commandArgs(trailingOnly = TRUE)
+csv_in <- args[1]
+degree <- as.integer(args[2])
+raw <- as.logical(args[3])
+out <- args[4]
+d <- read.csv(csv_in, header = FALSE)
+Z <- do.call(polym, c(as.list(d), list(degree = degree, raw = raw)))
+write.csv(unclass(Z), out, row.names = FALSE)
+"""
+
+
+def r_polym_matrix(xs, degree: int, raw: bool = False):
+    """`xs` is a list of equal-length 1D sequences, one per variable."""
+    import numpy as np
+
+    if not R_AVAILABLE:
+        raise RuntimeError("Rscript not found on PATH; R is required for oracle tests")
+    script = _write_script(_R_POLYM_SCRIPT)
+    csv_path = tempfile.NamedTemporaryFile(suffix=".csv", delete=False).name
+    with open(csv_path, "w") as f:
+        for row in zip(*xs):
+            f.write(",".join(str(v) for v in row) + "\n")
+    out_path = tempfile.NamedTemporaryFile(suffix=".csv", delete=False).name
+    result = subprocess.run(
+        ["Rscript", str(script), csv_path, str(degree), "TRUE" if raw else "FALSE", out_path],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"R failed for polym(..., degree={degree}, raw={raw}):\n{result.stderr}")
+    return np.loadtxt(out_path, delimiter=",", skiprows=1, ndmin=2)
+
+
 _R_BS_SCRIPT = r"""
 args <- commandArgs(trailingOnly = TRUE)
 x <- scan(args[1], quiet = TRUE)

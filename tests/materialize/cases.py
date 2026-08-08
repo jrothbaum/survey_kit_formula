@@ -46,4 +46,7 @@ FIXTURE_CASES = [
     ("survey_kit_shaped", "y ~ 1 + x + z + z*x*C(a)"),
     ("sin_cos_transform", "y ~ sin(x) + cos(z)"),
     ("abs_transform", "y ~ abs(x)"),
+    ("polym_2var_degree2", "y ~ poly(x, z, degree = 2)"),
+    ("polym_2var_raw", "y ~ poly(x, z, degree = 2, raw = TRUE)"),
+    ("polym_with_other_terms", "y ~ a + poly(x, z, degree = 2)"),
 ]

@@ -16,13 +16,13 @@ import numpy as np
 import polars as pl
 
 from ..contrasts.base import CONTRAST_FUNCTIONS, default_contrast
-from ..dispatch.poly_bs import BSplineState, PolyState, fit_bs, fit_poly
+from ..dispatch.poly_bs import BSplineState, MultivariatePolyState, PolyState, fit_bs, fit_poly, fit_polym
 from ..dispatch.registry import UnknownFormulaFunction, is_registered
 from ..dispatch.reserved import contrast_override, is_offset
 from ..parser.args import split_args
 from ..parser.ast_nodes import Call, Identifier, Term, TermList, Var, var_term
 from ..parser.parser import parse_formula
-from .classify import DataClass, classify_var, underlying_column
+from .classify import DataClass, classify_var, referenced_columns, underlying_column
 from .marginality import Coding, compute_marginality
 
 _TRUE_STRINGS = {"true", "t"}
@@ -41,7 +41,7 @@ class FactorSpec:
 class NumericSpec:
     var: Var
     width: int
-    poly_state: Optional[PolyState] = None
+    poly_state: Optional[Union[PolyState, MultivariatePolyState]] = None
     bs_state: Optional[BSplineState] = None
 
 
@@ -329,18 +329,35 @@ def _as_bool(text: str) -> bool:
 
 
 def _build_poly_spec(v: Call, df: pl.DataFrame, null_dummy: bool, null_fill: float) -> Tuple[NumericSpec, bool]:
+    """`poly(x, degree=D)` (univariate) or `poly(x1, x2, ..., degree=D)` /
+    R's `polym()` (multivariate, >=2 positional columns) -- R dispatches on
+    argument count at call time (`poly`'s own source: if `...` holds more
+    than a lone scalar degree, it delegates to `polym`); we dispatch the
+    same way, except `degree` is always required as a keyword in v1, so
+    there's no "positional degree vs. second variable" ambiguity to
+    resolve the way R's own dispatch has to."""
     positional, kwargs = _split_call_args(v)
     if not positional:
-        raise ValueError(f"poly({v.raw_args}) needs a column as its first argument")
+        raise ValueError(f"poly({v.raw_args}) needs at least one column as a positional argument")
     if "degree" not in kwargs:
         raise ValueError(f"poly({v.raw_args}): 'degree' must be given as a keyword argument in v1")
-    col = positional[0].raw_value.strip()
-    has_nulls = _check_numeric_nulls(col, df, null_dummy, context=f"poly({v.raw_args})")
+    cols = [p.raw_value.strip() for p in positional]
     degree = int(kwargs["degree"])
     raw = _as_bool(kwargs["raw"]) if "raw" in kwargs else False
-    x = df[col].cast(pl.Float64).fill_null(null_fill).to_numpy()
-    _, state = fit_poly(x, degree=degree, raw=raw)
-    return NumericSpec(var=v, width=degree, poly_state=state), has_nulls
+
+    has_nulls = False
+    for col in cols:
+        if _check_numeric_nulls(col, df, null_dummy, context=f"poly({v.raw_args})"):
+            has_nulls = True
+
+    if len(cols) == 1:
+        x = df[cols[0]].cast(pl.Float64).fill_null(null_fill).to_numpy()
+        _, state = fit_poly(x, degree=degree, raw=raw)
+        return NumericSpec(var=v, width=degree, poly_state=state), has_nulls
+
+    xs = [df[c].cast(pl.Float64).fill_null(null_fill).to_numpy() for c in cols]
+    fitted, mstate = fit_polym(xs, degree=degree, raw=raw)
+    return NumericSpec(var=v, width=fitted.shape[1], poly_state=mstate), has_nulls
 
 
 def _build_bs_spec(v: Call, df: pl.DataFrame, null_dummy: bool, null_fill: float) -> Tuple[NumericSpec, bool]:

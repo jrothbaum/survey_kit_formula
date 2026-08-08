@@ -13,7 +13,17 @@ from .registry import (
     is_registered,
     resolve,
 )
-from .poly_bs import BSplineState, PolyState, apply_bs, apply_poly, fit_bs, fit_poly
+from .poly_bs import (
+    BSplineState,
+    MultivariatePolyState,
+    PolyState,
+    apply_bs,
+    apply_poly,
+    apply_polym,
+    fit_bs,
+    fit_poly,
+    fit_polym,
+)
 
 
 def polars_expr_for_call(call: Call) -> pl.Expr:
@@ -30,11 +40,14 @@ __all__ = [
     "STRUCTURAL_RESERVED",
     "UnknownFormulaFunction",
     "BSplineState",
+    "MultivariatePolyState",
     "PolyState",
     "apply_bs",
     "apply_poly",
+    "apply_polym",
     "fit_bs",
     "fit_poly",
+    "fit_polym",
     "contrast_override",
     "eval_I",
     "is_offset",
