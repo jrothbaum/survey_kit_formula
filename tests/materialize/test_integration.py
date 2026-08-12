@@ -19,7 +19,7 @@ import polars as pl
 import pytest
 
 from parity.r_oracle import R_AVAILABLE, r_model_matrix
-from polars_formula.terms.spec import ModelSpec
+from survey_kit_formula.terms.spec import ModelSpec
 
 requires_r = pytest.mark.skipif(not R_AVAILABLE, reason="R is not installed")
 
@@ -58,7 +58,7 @@ def test_column_count_is_full_rank_not_cartesian_product():
     # (not DUMMY) coding everywhere -- confirm that's actually what
     # happened, i.e. the reduction isn't accidentally being skipped.
     codings = {c for t in spec.terms for c in t.coding.values()}
-    from polars_formula.terms.marginality import Coding
+    from survey_kit_formula.terms.marginality import Coding
 
     assert codings == {Coding.CONTRASTS}
     # What *no* full-rank reduction at all would need (every factor DUMMY

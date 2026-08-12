@@ -8,7 +8,7 @@ project traces back to) run it against pandas -- that's the representative
 comparison, not formulaic's newer/less-exercised polars support.
 
 Times `model_matrix()` through to a raw numpy array (`np.asarray(mm)`),
-matching what polars_formula returns, since that's the actually-comparable
+matching what survey_kit_formula returns, since that's the actually-comparable
 end state (a design matrix ready for a solver), not formulaic's intermediate
 `ModelMatrix` wrapper.
 """

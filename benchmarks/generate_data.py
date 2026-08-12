@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Writes one CSV per row-count in `SIZES + LARGE_SIZES`, shared across all
-three tools (polars_formula, formulaic, R) so every benchmark cell runs on
+three tools (survey_kit_formula, formulaic, R) so every benchmark cell runs on
 byte-identical data. CSV, not Parquet: it's the one format all three read
 natively without extra optional dependencies (R would need the `arrow`
 package for Parquet).

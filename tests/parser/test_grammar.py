@@ -12,8 +12,8 @@ from __future__ import annotations
 import pytest
 
 from parity.r_oracle import R_AVAILABLE, r_term_structure
-from polars_formula.parser import Identifier, parse_formula
-from polars_formula.parser.ast_nodes import Term
+from survey_kit_formula.parser import Identifier, parse_formula
+from survey_kit_formula.parser.ast_nodes import Term
 
 requires_r = pytest.mark.skipif(not R_AVAILABLE, reason="R is not installed")
 
@@ -89,7 +89,7 @@ def test_lhs_captured():
 
 def test_lhs_function_call():
     parsed = parse_formula("log(y) ~ x")
-    from polars_formula.parser import Call
+    from survey_kit_formula.parser import Call
 
     assert parsed.lhs == Call("log", "y")
 
@@ -99,7 +99,7 @@ def test_call_raw_args_untouched_by_grammar():
     parsed = parse_formula("y ~ a + I(b + c)")
     terms = list(parsed.rhs)
     assert len(terms) == 2
-    from polars_formula.parser import Call
+    from survey_kit_formula.parser import Call
 
     assert any(t.vars == (Call("I", "b + c"),) for t in terms)
 

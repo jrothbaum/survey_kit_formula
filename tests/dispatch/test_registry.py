@@ -4,7 +4,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_formula.dispatch import (
+from survey_kit_formula.dispatch import (
     STRUCTURAL_RESERVED,
     UnknownFormulaFunction,
     contrast_override,
@@ -13,8 +13,8 @@ from polars_formula.dispatch import (
     is_registered,
     polars_expr_for_call,
 )
-from polars_formula.parser.ast_nodes import Call
-from polars_formula.parser.tokenizer import FormulaSyntaxError
+from survey_kit_formula.parser.ast_nodes import Call
+from survey_kit_formula.parser.tokenizer import FormulaSyntaxError
 
 DF = pl.DataFrame({"x": [1.0, 2.0, 3.0, 4.0], "z": [10.0, 20.0, 30.0, 40.0]})
 ANGLES = pl.DataFrame({"x": [0.1, 0.5, 0.9, 0.3]})

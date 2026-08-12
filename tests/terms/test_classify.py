@@ -1,8 +1,8 @@
 import polars as pl
 import pytest
 
-from polars_formula.parser.ast_nodes import Call, Identifier
-from polars_formula.terms.classify import DataClass, classify_var, underlying_column
+from survey_kit_formula.parser.ast_nodes import Call, Identifier
+from survey_kit_formula.terms.classify import DataClass, classify_var, underlying_column
 
 SCHEMA = pl.Schema(
     {

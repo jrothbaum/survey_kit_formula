@@ -22,7 +22,7 @@ import pytest
 
 from materialize.cases import BOOL_COLS, DF, FACTOR_COLS, FIXTURE_CASES
 from parity.r_oracle import R_AVAILABLE, r_model_matrix
-from polars_formula.terms.spec import ModelSpec
+from survey_kit_formula.terms.spec import ModelSpec
 
 requires_r = pytest.mark.skipif(not R_AVAILABLE, reason="R is not installed")
 

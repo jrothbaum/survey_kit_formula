@@ -4,7 +4,7 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_formula.terms.spec import ModelSpec
+from survey_kit_formula.terms.spec import ModelSpec
 
 DF = pl.DataFrame(
     {
@@ -34,7 +34,7 @@ def test_null_dummy_no_raise():
 
 def test_null_dummy_companion_columns_tracked():
     spec = ModelSpec.from_formula("y ~ x + a", DF, null_dummy=True)
-    from polars_formula.parser.ast_nodes import Identifier
+    from survey_kit_formula.parser.ast_nodes import Identifier
 
     assert set(spec.null_companions) == {Identifier("x"), Identifier("a")}
     assert spec.total_columns == 1 + 1 + 1 + 2  # intercept + x + a(1 contrast) + 2 companions

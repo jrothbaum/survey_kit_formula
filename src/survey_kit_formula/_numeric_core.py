@@ -2,12 +2,12 @@
 (`dispatch/poly_bs.py`) and `contr.poly()` (`contrasts/base.py`).
 
 Deliberately a standalone top-level module with zero dependencies on any
-other `polars_formula` subpackage (not even `terms`, where it previously
+other `survey_kit_formula` subpackage (not even `terms`, where it previously
 lived): `dispatch.reserved` needs `contrasts.base`, and `terms.spec` needs
 both `contrasts` and `dispatch` — so anything both `contrasts` and
 `dispatch` depend on has to sit outside all three, or importing any one of
 their submodules can trigger the others' `__init__.py` mid-initialization
-and fail. Import `polars_formula._numeric_core` directly, never through
+and fail. Import `survey_kit_formula._numeric_core` directly, never through
 `terms`.
 
 Translated directly from R's `stats::poly` (`src/library/stats/R/

@@ -11,7 +11,7 @@ import polars as pl
 import pytest
 
 from materialize.cases import DF, FIXTURE_CASES
-from polars_formula.terms.spec import ModelSpec
+from survey_kit_formula.terms.spec import ModelSpec
 
 
 @pytest.mark.parametrize("slug,formula", FIXTURE_CASES)

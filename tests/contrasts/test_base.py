@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from parity.r_oracle import R_AVAILABLE, r_contr_poly_scores, r_contrast_matrix
-from polars_formula.contrasts.base import (
+from survey_kit_formula.contrasts.base import (
     contr_helmert,
     contr_poly,
     contr_sas,
@@ -12,8 +12,8 @@ from polars_formula.contrasts.base import (
     contr_treatment,
     resolve_contrast_name,
 )
-from polars_formula.dispatch.reserved import contrast_override
-from polars_formula.parser.ast_nodes import Call
+from survey_kit_formula.dispatch.reserved import contrast_override
+from survey_kit_formula.parser.ast_nodes import Call
 
 requires_r = pytest.mark.skipif(not R_AVAILABLE, reason="R is not installed")
 

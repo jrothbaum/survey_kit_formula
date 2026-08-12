@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from parity.r_oracle import R_AVAILABLE, r_bs_matrix, r_bs_predict_outside, r_poly_matrix
-from polars_formula.dispatch.poly_bs import apply_bs, apply_poly, fit_bs, fit_poly
+from survey_kit_formula.dispatch.poly_bs import apply_bs, apply_poly, fit_bs, fit_poly
 
 requires_r = pytest.mark.skipif(not R_AVAILABLE, reason="R is not installed")
 

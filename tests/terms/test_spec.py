@@ -4,9 +4,9 @@ import numpy as np
 import polars as pl
 import pytest
 
-from polars_formula.parser.ast_nodes import Call, Identifier
-from polars_formula.terms.marginality import Coding
-from polars_formula.terms.spec import ModelSpec
+from survey_kit_formula.parser.ast_nodes import Call, Identifier
+from survey_kit_formula.terms.marginality import Coding
+from survey_kit_formula.terms.spec import ModelSpec
 
 DF = pl.DataFrame(
     {

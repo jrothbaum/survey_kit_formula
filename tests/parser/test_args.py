@@ -1,4 +1,4 @@
-from polars_formula.parser.args import Arg, split_args
+from survey_kit_formula.parser.args import Arg, split_args
 
 
 def test_simple_positional():

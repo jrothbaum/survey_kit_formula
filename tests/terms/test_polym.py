@@ -13,13 +13,13 @@ import pytest
 import polars as pl
 
 from parity.r_oracle import R_AVAILABLE, r_polym_matrix
-from polars_formula.dispatch.poly_bs import (
+from survey_kit_formula.dispatch.poly_bs import (
     MultivariatePolyState,
     _poly_exponent_combos,
     apply_polym,
     fit_polym,
 )
-from polars_formula.terms.spec import ModelSpec
+from survey_kit_formula.terms.spec import ModelSpec
 
 requires_r = pytest.mark.skipif(not R_AVAILABLE, reason="R is not installed")
 
@@ -125,7 +125,7 @@ def test_formula_level_multivariate_poly_predict_reuse():
 def test_formula_level_multivariate_poly_null_dummy():
     df = pl.DataFrame({"y": [1.0, 2.0, 3.0, 4.0], "x": [1.0, None, 3.0, 4.0], "z": [1.0, 2.0, 3.0, 4.0]})
     spec = ModelSpec.from_formula("y ~ poly(x, z, degree = 2)", df, null_dummy=True)
-    from polars_formula.parser.ast_nodes import Call
+    from survey_kit_formula.parser.ast_nodes import Call
 
     assert Call("poly", "x, z, degree = 2") in spec.null_companions
     mm = spec.get_model_matrix(df)

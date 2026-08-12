@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Runs one (data, formula) cell for polars_formula. Meant to be invoked as
+"""Runs one (data, formula) cell for survey_kit_formula. Meant to be invoked as
 its own subprocess (see benchmark.py) wrapped in `/usr/bin/time -v`, so peak
 RSS reflects this one build in isolation. Prints a single JSON line to
 stdout with the *internal* build time (excludes import + CSV read, which
@@ -26,7 +26,7 @@ import time
 
 import polars as pl
 
-from polars_formula.terms.spec import ModelSpec
+from survey_kit_formula.terms.spec import ModelSpec
 
 _CATEGORICAL_COLS = ("A", "B", "C", "D", "Ahi", "Bhi", "Vhi")
 

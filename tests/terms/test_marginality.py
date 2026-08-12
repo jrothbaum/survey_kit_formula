@@ -10,8 +10,8 @@ import polars as pl
 import pytest
 
 from parity.r_oracle import R_AVAILABLE, r_term_column_counts
-from polars_formula.parser import parse_formula
-from polars_formula.terms.marginality import compute_marginality, term_column_count
+from survey_kit_formula.parser import parse_formula
+from survey_kit_formula.terms.marginality import compute_marginality, term_column_count
 
 requires_r = pytest.mark.skipif(not R_AVAILABLE, reason="R is not installed")
 

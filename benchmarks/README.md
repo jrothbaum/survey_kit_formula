@@ -1,6 +1,6 @@
 # Benchmarks
 
-`polars_formula` vs [formulaic](https://github.com/matthewwardrop/formulaic)
+`survey_kit_formula` vs [formulaic](https://github.com/matthewwardrop/formulaic)
 vs R's `model.matrix()`. 10 formulas × 20K/100K/400K rows, all 3 tools;
 `survey_kit_shaped` and `wide_columns` also run at 800K/1.6M/2.4M rows for
 `ours`/`r` only (`formulaic` already fails at 400K on similarly-shaped
@@ -106,7 +106,7 @@ before RSS climbs, not a watchdog kill.
 categorical interaction with no lower-order terms (`A:B:C:D`: 81 cols for
 formulaic, 82 for R and `ours`) — formulaic prunes to true full rank per
 scoped sub-block, R's own heuristic (`model.c`) doesn't catch this case
-and leaves one redundant column. `polars_formula` matches R here, so
+and leaves one redundant column. `survey_kit_formula` matches R here, so
 comparisons on that formula shape aren't perfectly apples-to-apples.
 
 ## Files
