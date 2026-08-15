@@ -10,11 +10,12 @@ from __future__ import annotations
 
 import ast
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 import polars as pl
 
+from .._intake import NativeKind, from_polars, schema_names, to_polars
 from ..contrasts.base import CONTRAST_FUNCTIONS, default_contrast
 from ..dispatch.poly_bs import (
     BSplineState,
@@ -27,11 +28,12 @@ from ..dispatch.poly_bs import (
     fit_polym,
 )
 from ..dispatch.registry import UnknownFormulaFunction, is_registered
-from ..dispatch.reserved import contrast_override, is_offset
+from ..dispatch.reserved import contrast_override
 from ..parser.args import split_args
-from ..parser.ast_nodes import Call, Identifier, Term, TermList, Var, var_term
+from ..parser.ast_nodes import Call, Identifier, Term, Var
 from ..parser.parser import parse_formula
-from .classify import DataClass, classify_var, referenced_columns, underlying_column
+from .classify import DataClass, classify_var, underlying_column
+from .columns import expand_dot, extract_offsets, required_columns_from_parsed
 from .marginality import Coding, compute_marginality
 
 _TRUE_STRINGS = {"true", "t"}
@@ -78,12 +80,13 @@ class ModelSpec:
     null_dummy: bool = False
     null_fill: float = 0.0
     null_companions: List[Var] = field(default_factory=list)
+    required_columns: List[str] = field(default_factory=list)
 
     @classmethod
     def from_formula(
         cls,
         formula: str,
-        df: Union[pl.DataFrame, pl.LazyFrame],
+        df: Any,
         *,
         null_dummy: bool = False,
         null_fill: float = 0.0,
@@ -97,14 +100,17 @@ class ModelSpec:
         raises, since no companion column was allocated for it and the
         spec's structure (`total_columns`) is fixed at fit time. Default
         (`null_dummy=False`) matches the original strict behavior: any null
-        anywhere raises."""
-        schema = df.collect_schema() if isinstance(df, pl.LazyFrame) else df.schema
-        if isinstance(df, pl.LazyFrame):
-            df = df.collect()
+        anywhere raises.
 
+        `df` can be a Polars DataFrame or LazyFrame, a pandas DataFrame, a
+        PyArrow Table, or any other dataframe type supported by narwhals."""
         parsed = parse_formula(formula)
-        rhs = _expand_dot(parsed.rhs, parsed.lhs, schema)
-        rhs, offset_vars = _extract_offsets(rhs)
+        needed = required_columns_from_parsed(parsed, schema_names(df))
+        df, _kind = to_polars(df, needed)
+
+        schema = df.schema
+        rhs = expand_dot(parsed.rhs, parsed.lhs, list(schema.keys()))
+        rhs, offset_vars = extract_offsets(rhs)
 
         marg = compute_marginality(rhs, schema, parsed.intercept)
 
@@ -140,84 +146,35 @@ class ModelSpec:
             null_dummy=null_dummy,
             null_fill=null_fill,
             null_companions=null_companions,
+            required_columns=needed,
         )
 
-    def get_model_matrix(self, df: Union[pl.DataFrame, pl.LazyFrame]) -> np.ndarray:
-        """Reapply this spec's fixed structure (marginality decisions,
-        contrasts, factor levels, poly()/bs() basis state) to `df` — the
-        `model_spec.get_model_matrix(new_df)` pattern. The `build` import is
-        deferred to call time (not module top-level) because `build`
-        depends on `terms` (this module) for `ModelSpec`/`FactorSpec`/etc.,
-        so importing it eagerly here would be circular."""
+    def get_model_matrix(self, df: Any) -> np.ndarray:
+        """Apply this spec's formula to new data `df`, returned as a NumPy
+        array of float64 values -- the same output as
+        `model_matrix(self.formula, df)`, but reusing this spec's factor
+        levels, contrasts, and spline settings instead of recomputing them
+        from `df`. `df` accepts the same dataframe types as `from_formula`."""
+        # Deferred import: `build` depends on `terms` (this module) for
+        # `ModelSpec`/`FactorSpec`/etc., so importing it at module top level
+        # would be circular.
         from ..build.matrix import build_model_matrix
 
-        if isinstance(df, pl.LazyFrame):
-            df = df.collect()
+        df, _kind = to_polars(df, self.required_columns)
         return build_model_matrix(self, df)
 
-    def get_model_frame(self, df: Union[pl.DataFrame, pl.LazyFrame]) -> pl.DataFrame:
-        """Same values and column order as `get_model_matrix`, returned as
-        a Polars DataFrame with each column packed to the tightest dtype
-        that represents it exactly (Boolean for 0/1 dummy/indicator
-        blocks, the smallest signed integer type for other whole-number
-        columns, Float64 otherwise) instead of one dense float64 numpy
-        array. Column names are deterministic and readable but not an
-        attempt at exact parity with R's `colnames(model.matrix())`."""
+    def get_model_frame(self, df: Any) -> Any:
+        """Same as `get_model_matrix`, but returns a dataframe in the same
+        format as `df` (pandas in, pandas out; Polars in, Polars out; ...)
+        instead of a NumPy array. Each column uses a compact dtype -- e.g. a
+        boolean column for a dummy/indicator variable -- rather than one
+        dense float64 array. Column names are deterministic and readable,
+        but don't attempt to exactly match R's `colnames(model.matrix())`."""
         from ..build.matrix import build_model_frame
 
-        if isinstance(df, pl.LazyFrame):
-            df = df.collect()
-        return build_model_frame(self, df)
-
-
-def _expand_dot(rhs: TermList, lhs: Optional[Var], schema: pl.Schema) -> TermList:
-    dot_term = None
-    for t in rhs:
-        if t.order == 1:
-            v = next(iter(t.vars))
-            if isinstance(v, Identifier) and v.name == ".":
-                dot_term = t
-                break
-    if dot_term is None:
-        return rhs
-
-    referenced = set()
-    for t in rhs:
-        for v in t.vars:
-            if isinstance(v, Identifier):
-                if v.name != ".":
-                    referenced.add(v.name)
-            elif isinstance(v, Call):
-                try:
-                    referenced.add(underlying_column(v))
-                except ValueError:
-                    pass
-    if isinstance(lhs, Identifier):
-        referenced.add(lhs.name)
-
-    remaining = [name for name in schema.keys() if name not in referenced]
-
-    result = TermList()
-    for t in rhs:
-        if t is dot_term:
-            for name in remaining:
-                result.add(var_term(Identifier(name)))
-        else:
-            result.add(t)
-    return result
-
-
-def _extract_offsets(rhs: TermList):
-    remaining = TermList()
-    offsets: List[Var] = []
-    for t in rhs:
-        if t.order == 1:
-            v = next(iter(t.vars))
-            if isinstance(v, Call) and is_offset(v):
-                offsets.append(v)
-                continue
-        remaining.add(t)
-    return remaining, offsets
+        df, kind = to_polars(df, self.required_columns)
+        result = build_model_frame(self, df)
+        return from_polars(result, kind)
 
 
 def _build_factor_spec(v: Var, dc: DataClass, df: pl.DataFrame, null_dummy: bool) -> Tuple[FactorSpec, bool]:
