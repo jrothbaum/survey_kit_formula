@@ -1,12 +1,14 @@
 # Python-generated files
 __pycache__/
 *.py[oc]
-build/
-dist/
-wheels/
+/build/
+/dist/
+/wheels/
 *.egg-info
-*.csv
-*.parquet
+
+# Generated/regenerable benchmark input data (see benchmarks/generate_data.py)
+/benchmarks/data/*.csv
+/benchmarks/data/*.parquet
 
 # Virtual environments
 .venv
