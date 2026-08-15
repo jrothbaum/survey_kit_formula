@@ -64,24 +64,6 @@ by default, any null in a modeled column raises an error. Pass
 `null_fill=`) and add a companion 0/1 "was this null" indicator column for
 any variable that had nulls when the spec was created.
 
-## What columns does a formula need?
-
-`required_columns` reads a formula string and returns the column names it
-needs, without needing any data:
-
-```python
-from survey_kit_formula import required_columns
-
-required_columns("y ~ x1 + factor(x2) + poly(x3, x4, degree=2)")
-# -> ["y", "x1", "x2", "x3", "x4"]
-```
-
-Useful for selecting down to just the needed columns before loading a
-large file. A bare `.` ("every other column") is the one case that needs
-to know the full set of columns available — pass a `pl.Schema`, a
-DataFrame, a LazyFrame, or anything else narwhals supports as a second
-argument, e.g. `required_columns("y ~ .", df)`.
-
 ## Formula syntax
 
 | Syntax | Meaning |
