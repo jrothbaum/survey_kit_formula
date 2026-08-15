@@ -1,6 +1,6 @@
 [project]
 name = "survey-kit-formula"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A polars-native clone of R's formula/model.matrix semantics"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -45,8 +45,14 @@ dev = [
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/survey_kit_formula/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/survey_kit_formula"]

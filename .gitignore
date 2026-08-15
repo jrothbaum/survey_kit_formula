@@ -5,6 +5,7 @@ __pycache__/
 /dist/
 /wheels/
 *.egg-info
+/src/survey_kit_formula/_version.py
 
 # Generated/regenerable benchmark input data (see benchmarks/generate_data.py)
 /benchmarks/data/*.csv
