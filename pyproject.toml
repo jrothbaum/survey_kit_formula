@@ -3,19 +3,44 @@ name = "survey-kit-formula"
 version = "0.1.0"
 description = "A polars-native clone of R's formula/model.matrix semantics"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.9"
+
+license = {text = "CC0 1.0 Universal"}
+authors = [
+    {name = "Jon Rothbaum", email = "jon.rothbaum@gmail.com"}
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+]
+
+keywords = ["formula", "model.matrix", "statistics", "polars", "R"]
+
 dependencies = [
     "polars>=1.28.1",
     "numpy>=2.0",
-    "scipy>=1.14",
-    "narwhals>=2.24.0",
+    "scipy>=1.13.1",
+    "narwhals>=2.21.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/jrothbaum/survey_kit_formula"
+Repository = "https://github.com/jrothbaum/survey_kit_formula"
 
 [dependency-groups]
 dev = [
-    "duckdb>=1.5.5",
-    "pandas>=3.0.5",
-    "pyarrow>=25.0.1",
+    "duckdb>=1.5.5 ; python_version >= '3.10'",
+    "pandas",
+    "pyarrow",
     "pytest>=8.0",
 ]
 
