@@ -97,6 +97,16 @@ unordered factors), `contr.sum`, `contr.helmert`, `contr.poly` (default for
 ordered factors), `contr.SAS` — or the bare shorthand (`treatment`, `sum`,
 `helmert`, `poly`, `SAS`).
 
+## Performance
+
+Roughly comparable to R's `model.matrix()` and Python's
+[formulaic](https://github.com/matthewwardrop/formulaic) on small, simple
+formulas. At larger row counts, or on formulas with many interacting
+categorical levels, the other two tools slow down or run
+out of memory; this one keeps building with less slow-down and smaller increases in memory. Full
+formula-by-formula, row-count-by-row-count numbers in
+[benchmarks/](benchmarks/README.md).
+
 ## Development
 
 ```bash
